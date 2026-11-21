@@ -1,0 +1,171 @@
+package frc.robot.subsystems.shooter.launch_calculator;
+
+import static edu.wpi.first.units.Units.Degrees;
+import static frc.robot.subsystems.shooter.launch_calculator.LaunchConstants.*;
+import static frc.robot.subsystems.shooter.turret.TurretConstants.*;
+
+import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.math.geometry.*;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
+import edu.wpi.first.units.measure.Angle;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import frc.robot.FieldConstants;
+import frc.robot.subsystems.shooter.turret.TurretSubsystem;
+import frc.robot.subsystems.swervedrive.SwerveDriveSubsystem;
+
+public class LaunchUtil {
+
+  public static Translation2d getPassingTarget() {
+    double robotY = SwerveDriveSubsystem.getInstance().getPose().getTranslation().getY();
+    Alliance alliance =
+        DriverStation.getAlliance().orElse(Alliance.Blue);
+    if (robotY >= FieldConstants.FIELD_WIDTH / 2) {
+      return (alliance == Alliance.Red)
+          ? FieldConstants.PASSING_UP_RED
+          : FieldConstants.PASSING_UP_BLUE;
+    } else {
+      return (alliance == Alliance.Red)
+          ? FieldConstants.PASSING_DOWN_RED
+          : FieldConstants.PASSING_DOWN_BLUE;
+    }
+  }
+
+  public static Angle getTurretAngleToHub(Pose2d robotPose) {
+    Angle angleToAllianceHub = getAngleToAllianceHub(robotPose);
+
+    Angle turretZeroFieldAngle = robotPose.getRotation().getMeasure().plus(Degrees.of(180));
+    Angle robotRotationCompensatedAngle =
+        angleToAllianceHub
+            .minus(turretZeroFieldAngle)
+            .plus(TurretSubsystem.getInstance().turretOffset);
+    Angle wrappedAngle =
+        wrapAngle(robotRotationCompensatedAngle, TurretSubsystem.getInstance().getAngle());
+
+    SmartDashboard.putNumber(
+        "LaunchCalculator/angleToAllianceHub (deg)", angleToAllianceHub.in(Degrees));
+    SmartDashboard.putNumber(
+        "LaunchCalculator/turretZeroFieldAngle (deg)", turretZeroFieldAngle.in(Degrees));
+    SmartDashboard.putNumber(
+        "LaunchCalculator/robotRotationCompensatedAngle (deg)",
+        robotRotationCompensatedAngle.in(Degrees));
+    SmartDashboard.putNumber("LaunchCalculator/wrappedTurretAngle (deg)", wrappedAngle.in(Degrees));
+
+    return wrappedAngle;
+  }
+
+  public static Angle getTurretAngleToPassingTarget(Pose2d robotPose) {
+    Angle angleToPassingTarget = getAngleToPassingTarget(robotPose);
+
+    Angle turretZeroFieldAngle = robotPose.getRotation().getMeasure().plus(Degrees.of(180));
+    Angle robotRotationCompensatedAngle =
+        angleToPassingTarget
+            .minus(turretZeroFieldAngle)
+            .plus(TurretSubsystem.getInstance().turretOffset);
+    Angle wrappedAngle =
+        wrapAngle(robotRotationCompensatedAngle, TurretSubsystem.getInstance().getAngle());
+
+    return wrappedAngle;
+  }
+
+  private static Angle getAngleToPassingTarget(Pose2d robotPose) {
+    Pose2d turretPose = TurretSubsystem.getPose(robotPose);
+    Translation2d passingTarget = getPassingTarget();
+    Translation2d hubDelta = passingTarget.minus(turretPose.getTranslation());
+    return hubDelta.getAngle().getMeasure();
+  }
+
+  private static Angle getAngleToAllianceHub(Pose2d robotPose) {
+    Pose2d turretPose = TurretSubsystem.getPose(robotPose);
+    Translation2d allianceHub = getAllianceHubTranslation2d();
+    Translation2d hubDelta = allianceHub.minus(turretPose.getTranslation());
+    return hubDelta.getAngle().getMeasure();
+  }
+
+  private static Translation2d getAllianceHubTranslation2d() {
+    DriverStation.Alliance alliance = null;
+    if (DriverStation.getAlliance().isPresent()) {
+      alliance = DriverStation.getAlliance().get();
+    }
+    if (alliance == DriverStation.Alliance.Red) {
+      return FieldConstants.RED_HUB_CENTER;
+    }
+    return FieldConstants.BLUE_HUB_CENTER;
+  }
+
+  private static Angle abs(Angle angle) {
+    double deg = angle.in(Degrees);
+    return deg < 0 ? Degrees.of(-deg) : angle;
+  }
+
+  private static Angle wrapAngle(Angle target, Angle currentAngle) {
+
+    Angle normalized = target;
+    while (normalized.gte(MAX_ANGLE)) {
+      normalized = normalized.minus(FULL_ROTATION);
+    }
+    while (normalized.lt(MIN_ANGLE)) {
+      normalized = normalized.plus(FULL_ROTATION);
+    }
+
+    Angle best = normalized;
+    Angle bestDist = abs(normalized.minus(currentAngle));
+
+    Angle plusAlt = normalized.plus(FULL_ROTATION);
+    if (plusAlt.lte(MAX_ANGLE)) {
+      Angle d = abs(plusAlt.minus(currentAngle));
+      if (d.lt(bestDist)) {
+        best = plusAlt;
+        bestDist = d;
+      }
+    }
+
+    Angle minusAlt = normalized.minus(FULL_ROTATION);
+    if (minusAlt.gte(MIN_ANGLE)) {
+      Angle d = abs(minusAlt.minus(currentAngle));
+      if (d.lt(bestDist)) {
+        best = minusAlt;
+      }
+    }
+
+    return best;
+  }
+
+  public static ChassisSpeeds transformVelocity(
+      ChassisSpeeds velocity, Translation2d transform, Rotation2d currentRotation) {
+    return new ChassisSpeeds(
+        velocity.vxMetersPerSecond
+            - velocity.omegaRadiansPerSecond
+                * (transform.getX() * currentRotation.getSin()
+                    + transform.getY() * currentRotation.getCos()),
+        velocity.vyMetersPerSecond
+            + velocity.omegaRadiansPerSecond
+                * (transform.getX() * currentRotation.getCos()
+                    - transform.getY() * currentRotation.getSin()),
+        velocity.omegaRadiansPerSecond);
+  }
+
+  public static Transform2d toTransform2d(Transform3d transform3d) {
+    Translation3d t = transform3d.getTranslation();
+    Rotation3d r = transform3d.getRotation();
+
+    Translation2d translation2d = new Translation2d(t.getX(), t.getY());
+    Rotation2d rotation2d = new Rotation2d(r.getZ());
+
+    return new Transform2d(translation2d, rotation2d);
+  }
+
+  public static Rotation2d getDriveAngleWithLauncherOffset(Pose2d robotPose, Translation2d target) {
+    Rotation2d fieldToHubAngle = target.minus(robotPose.getTranslation()).getAngle();
+    Rotation2d hubAngle =
+        new Rotation2d(
+            Math.asin(
+                MathUtil.clamp(
+                    robotToLauncher.getTranslation().getY()
+                        / target.getDistance(robotPose.getTranslation()),
+                    -1.0,
+                    1.0)));
+    return fieldToHubAngle.plus(hubAngle).plus(robotToLauncher.getRotation().toRotation2d());
+  }
+}

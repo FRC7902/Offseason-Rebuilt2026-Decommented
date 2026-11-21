@@ -1,0 +1,41 @@
+{
+  "robotWidth": 0.686,
+  "robotLength": 0.686,
+  "holonomicMode": true,
+  "pathFolders": [
+    "1 time sweep LEFT paths",
+    "1 time sweep RIGHT paths",
+    "2 time sweep LEFT paths",
+    "MID paths",
+    "2 time sweep RIGHT paths"
+  ],
+  "autoFolders": [],
+  "defaultMaxVel": 3.0,
+  "defaultMaxAccel": 3.0,
+  "defaultMaxAngVel": 540.0,
+  "defaultMaxAngAccel": 720.0,
+  "defaultNominalVoltage": 12.0,
+  "robotMass": 74.0,
+  "robotMOI": 6.883,
+  "robotTrackwidth": 0.546,
+  "driveWheelRadius": 0.098,
+  "driveGearing": 5.36,
+  "maxDriveSpeed": 15.0,
+  "driveMotorType": "falcon500FOC",
+  "driveCurrentLimit": 60.0,
+  "wheelCOF": 1.2,
+  "flModuleX": 0.276225,
+  "flModuleY": 0.276225,
+  "frModuleX": 0.276225,
+  "frModuleY": -0.276225,
+  "blModuleX": -0.276225,
+  "blModuleY": 0.276225,
+  "brModuleX": -0.276225,
+  "brModuleY": -0.276225,
+  "bumperOffsetX": 0.0,
+  "bumperOffsetY": 0.0,
+  "robotFeatures": [
+    "{\"name\":\"Rectangle\",\"type\":\"rounded_rect\",\"data\":{\"center\":{\"x\":0.375,\"y\":0.0},\"size\":{\"width\":0.686,\"length\":0.15},\"borderRadius\":0.05,\"strokeWidth\":0.01,\"filled\":false}}",
+    "{\"name\":\"Circle\",\"type\":\"circle\",\"data\":{\"center\":{\"x\":-0.2,\"y\":0.2},\"radius\":0.1,\"strokeWidth\":0.01,\"filled\":false}}"
+  ]
+}

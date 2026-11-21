@@ -1,0 +1,57 @@
+package frc.robot.subsystems.shooter.hood;
+
+import static edu.wpi.first.units.Units.Amps;
+import static edu.wpi.first.units.Units.Degrees;
+import static edu.wpi.first.units.Units.Meters;
+import static edu.wpi.first.units.Units.Seconds;
+
+import edu.wpi.first.math.controller.ArmFeedforward;
+import edu.wpi.first.math.system.plant.DCMotor;
+import edu.wpi.first.units.measure.Angle;
+import edu.wpi.first.wpilibj.DriverStation;
+import yams.gearing.GearBox;
+import yams.gearing.MechanismGearing;
+import yams.mechanisms.config.ArmConfig;
+import yams.motorcontrollers.SmartMotorControllerConfig;
+import yams.motorcontrollers.SmartMotorControllerConfig.MotorMode;
+import yams.telemetry.SmartMotorControllerTelemetryConfig;
+
+public class HoodConstants {
+
+  public static final DCMotor MOTOR = DCMotor.getKrakenX44Foc(1);
+  public static final int CAN_ID = 0;
+
+  public static final Angle TOLERANCE = Degrees.of(1.0);
+
+  public static final Angle MIN_ANGLE = Degrees.of(0);
+  public static final Angle MAX_ANGLE = Degrees.of(24.3457);
+
+  public static final Angle DEFAULT_ANGLE = Degrees.of(0);
+
+  public static final SmartMotorControllerConfig SMC_CONFIG =
+      new SmartMotorControllerConfig()
+          .withClosedLoopController(160, 0, 0)
+          .withSimClosedLoopController(51, 0, 10)
+          .withSoftLimits(MIN_ANGLE, MAX_ANGLE)
+          .withGearing(new MechanismGearing(GearBox.fromReductionStages(147)))
+          .withIdleMode(MotorMode.BRAKE)
+          .withTelemetry(
+              "HoodMotor",
+              new SmartMotorControllerTelemetryConfig()
+                  .withTelemetryVerbosity(SmartMotorControllerConfig.TelemetryVerbosity.HIGH)
+
+                  .withNetworkTables(!DriverStation.isFMSAttached()))
+          .withStatorCurrentLimit(Amps.of(30))
+          .withSupplyCurrentLimit(Amps.of(30))
+          .withMotorInverted(true)
+          .withClosedLoopRampRate(Seconds.of(0.25))
+          .withFeedforward(new ArmFeedforward(0.353, 0.3, 13.076, 0.22999))
+          .withSimFeedforward(new ArmFeedforward(0.0, 0.0465, 0, 0))
+          .withSimStartingPosition(Degrees.zero());
+
+  public static final ArmConfig ARM_CONFIG =
+      new ArmConfig()
+          .withLength(Meters.of(0.135))
+          .withHardLimits(MIN_ANGLE, MAX_ANGLE);
+
+}

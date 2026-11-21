@@ -1,0 +1,61 @@
+package frc.robot.subsystems.indexer.belt;
+
+import static edu.wpi.first.units.Units.Amps;
+import static edu.wpi.first.units.Units.RPM;
+import static edu.wpi.first.units.Units.Seconds;
+
+import edu.wpi.first.math.controller.SimpleMotorFeedforward;
+import edu.wpi.first.math.system.plant.DCMotor;
+import edu.wpi.first.units.measure.AngularVelocity;
+import edu.wpi.first.wpilibj.DriverStation;
+import yams.gearing.GearBox;
+import yams.gearing.MechanismGearing;
+import yams.mechanisms.config.FlyWheelConfig;
+import yams.motorcontrollers.SmartMotorControllerConfig;
+import yams.motorcontrollers.SmartMotorControllerConfig.MotorMode;
+import yams.telemetry.SmartMotorControllerTelemetryConfig;
+
+public class IndexerBeltConstants {
+
+  public static final DCMotor LEADER_MOTOR = DCMotor.getKrakenX44Foc(1);
+  public static final DCMotor FOLLOWER_MOTOR = DCMotor.getKrakenX44Foc(1);
+  public static final int LEADER_CAN_ID = 1;
+  public static final int FOLLOWER_CAN_ID = 53;
+
+  private static final AngularVelocity MAX_SPEED = RPM.of(3377);
+  public static final AngularVelocity TOLERANCE = RPM.of(100);
+
+  public static final AngularVelocity FEEDING_SPEED = MAX_SPEED;
+  public static final AngularVelocity STORING_SPEED = RPM.of(100);
+
+  public static final double FEEDING_DUTY_CYCLE = 1.0;
+  public static final double STORING_DUTY_CYCLE = 0.05;
+
+  public static final SmartMotorControllerConfig LEADER_SMC_CONFIG =
+      new SmartMotorControllerConfig()
+          .withClosedLoopController(0.0, 0, 0)
+          .withSimClosedLoopController(0, 0, 0)
+          .withGearing(new MechanismGearing(GearBox.fromReductionStages(2.1818)))
+          .withIdleMode(MotorMode.COAST)
+          .withTelemetry(
+              "IndexerBeltMotor",
+              new SmartMotorControllerTelemetryConfig()
+                  .withTelemetryVerbosity(SmartMotorControllerConfig.TelemetryVerbosity.LOW)
+
+                  .withNetworkTables(!DriverStation.isFMSAttached()))
+          .withStatorCurrentLimit(Amps.of(60))
+          .withSupplyCurrentLimit(Amps.of(60))
+          .withMotorInverted(false)
+          .withClosedLoopRampRate(Seconds.of(0.25))
+          .withOpenLoopRampRate(Seconds.of(0.25))
+          .withFeedforward(new SimpleMotorFeedforward(0.35, 0.217, 0))
+          .withSimFeedforward(new SimpleMotorFeedforward(0.0102, 0.21, 0));
+
+  public static final SmartMotorControllerConfig FOLLOWER_SMC_CONFIG =
+      LEADER_SMC_CONFIG.clone().withMotorInverted(true);
+
+  public static final FlyWheelConfig FLY_WHEEL_CONFIG =
+      new FlyWheelConfig()
+
+          .withSpeedometerSimulation(MAX_SPEED);
+}

@@ -1,0 +1,62 @@
+package frc.robot.subsystems.shooter.turret;
+
+import static edu.wpi.first.units.Units.Amps;
+import static edu.wpi.first.units.Units.Degrees;
+
+import edu.wpi.first.math.controller.SimpleMotorFeedforward;
+import edu.wpi.first.math.geometry.Rotation3d;
+import edu.wpi.first.math.geometry.Transform3d;
+import edu.wpi.first.math.system.plant.DCMotor;
+import edu.wpi.first.units.measure.Angle;
+import edu.wpi.first.wpilibj.DriverStation;
+import yams.gearing.GearBox;
+import yams.gearing.MechanismGearing;
+import yams.mechanisms.config.PivotConfig;
+import yams.motorcontrollers.SmartMotorControllerConfig;
+import yams.motorcontrollers.SmartMotorControllerConfig.MotorMode;
+import yams.telemetry.SmartMotorControllerTelemetryConfig;
+
+public class TurretConstants {
+
+  public static final DCMotor MOTOR = DCMotor.getKrakenX44Foc(1);
+  public static final int CAN_ID = 42;
+
+  public static final Angle FULL_ROTATION = Degrees.of(360);
+  public static final Angle WRAP_POINT = Degrees.of(165);
+  public static final Angle THRESHOLD = Degrees.of(10);
+
+  public static final Angle MAX_ANGLE = WRAP_POINT.plus(THRESHOLD);
+  public static final Angle MIN_ANGLE = WRAP_POINT.minus(FULL_ROTATION).minus(THRESHOLD);
+
+  public static final Angle DEFAULT_ANGLE = Degrees.of(0);
+  public static final Angle DEFAULT_OFFSET_ANGLE = Degrees.of(0);
+
+  public static final Angle TOLERANCE = Degrees.of(1);
+
+  public static final SmartMotorControllerConfig SMC_CONFIG =
+      new SmartMotorControllerConfig()
+          .withClosedLoopController(150.0, 0.0, 0.8)
+          .withSimClosedLoopController(20, 0.0, 0)
+          .withGearing(new MechanismGearing(GearBox.fromReductionStages(45)))
+          .withIdleMode(MotorMode.BRAKE)
+          .withMotorInverted(true)
+          .withFeedforward(new SimpleMotorFeedforward(0.042757, 5.5173, 0.83544, 0.02))
+          .withSimFeedforward(new SimpleMotorFeedforward(0.01025, 0.0, 0.0, 0.02))
+          .withTelemetry(
+              "TurretMotor",
+              new SmartMotorControllerTelemetryConfig()
+                  .withTelemetryVerbosity(SmartMotorControllerConfig.TelemetryVerbosity.LOW)
+
+                  .withNetworkTables(!DriverStation.isFMSAttached()))
+          .withStatorCurrentLimit(Amps.of(40))
+          .withSupplyCurrentLimit(Amps.of(40))
+          .withSoftLimits(MIN_ANGLE, MAX_ANGLE)
+          .withSimStartingPosition(Degrees.zero())
+          .withMomentOfInertia(yams.units.YUnits.PoundSquareInches.of(0.01));
+
+  public static final PivotConfig PIVOT_CONFIG =
+      new PivotConfig().withHardLimits(TurretConstants.MIN_ANGLE, TurretConstants.MAX_ANGLE);
+
+  public static final Transform3d ROBOT_TO_TURRET =
+      new Transform3d(-0.152, 0.144, 0.359, Rotation3d.kZero);
+}

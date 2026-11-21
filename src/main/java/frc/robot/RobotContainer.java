@@ -1,0 +1,312 @@
+
+package frc.robot;
+
+import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.auto.NamedCommands;
+import edu.wpi.first.math.geometry.Pose3d;
+import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.networktables.StructArrayPublisher;
+import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.Commands;
+import edu.wpi.first.wpilibj2.command.ConditionalCommand;
+import edu.wpi.first.wpilibj2.command.button.CommandPS5Controller;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
+import frc.robot.subsystems.indexer.IndexerSystem;
+import frc.robot.subsystems.indexer.belt.IndexerBeltSubsystem;
+import frc.robot.subsystems.indexer.feeder.FeederSubsystem;
+import frc.robot.subsystems.indexer.roller_floor.RollerFloorSubsystem;
+import frc.robot.subsystems.indexer.vertical_roller.VerticalRollerSubsystem;
+import frc.robot.subsystems.intake.IntakeSystem;
+import frc.robot.subsystems.intake.linear.LinearIntakeSubsystem;
+import frc.robot.subsystems.intake.roller.IntakeRollerSubsystem;
+import frc.robot.subsystems.shooter.ShooterSystem;
+import frc.robot.subsystems.shooter.flywheel.FlywheelSubsystem;
+import frc.robot.subsystems.shooter.hood.HoodSubsystem;
+import frc.robot.subsystems.shooter.launch_calculator.LaunchCalculator;
+import frc.robot.subsystems.shooter.turret.TurretSubsystem;
+import frc.robot.subsystems.swervedrive.SwerveDriveConstants;
+import frc.robot.subsystems.swervedrive.SwerveDriveSubsystem;
+import java.util.function.BooleanSupplier;
+import swervelib.SwerveInputStream;
+
+public class RobotContainer {
+
+  private final CommandPS5Controller m_driverController;
+
+  private final IndexerSystem m_indexerSystem;
+  private final IntakeSystem m_intakeSystem;
+  public final ShooterSystem m_shooterSystem;
+
+  private final LinearIntakeSubsystem m_linearIntakeSubsystem;
+  private final HoodSubsystem m_hoodSubsystem;
+  private final TurretSubsystem m_turretSubsystem;
+  private final FlywheelSubsystem m_flywheelSubsystem;
+
+  private final SwerveDriveSubsystem m_swerveDriveSubsystem;
+
+  private double applyDriverTranslationStickCurve(double input) {
+    return Math.copySign(
+        Math.pow(Math.abs(input), SwerveDriveConstants.DRIVER_TRANSLATION_STICK_CURVE_EXPONENT),
+        input);
+  }
+
+  private double getCurvedDriverLeftX() {
+    return applyDriverTranslationStickCurve(-m_driverController.getLeftX());
+  }
+
+  private double getCurvedDriverLeftY() {
+    return applyDriverTranslationStickCurve(-m_driverController.getLeftY());
+  }
+
+  SwerveInputStream driveAngularVelocity;
+  SwerveInputStream driveFastAngularVelocity;
+  SwerveInputStream driveSlowAngularVelocity;
+  SwerveInputStream drivePassingSlowAngularVelocity;
+  SwerveInputStream driveDirectAngle;
+
+  Command driveFieldOrientedAngularVelocity;
+  ConditionalCommand driveSlowFieldOrientedAngularVelocity;
+  Command driveFieldOrientedDirectAngle;
+
+  private final StructArrayPublisher<Pose3d> posesPublisher;
+
+  private final SendableChooser<Command> autoChooser;
+
+  public RobotContainer() {
+
+    m_driverController = new CommandPS5Controller(Constants.DRIVER_CONTROLLER_PORT);
+
+    m_swerveDriveSubsystem = SwerveDriveSubsystem.getInstance();
+    driveAngularVelocity =
+        SwerveInputStream.of(
+                m_swerveDriveSubsystem.getSwerveDrive(),
+                this::getCurvedDriverLeftY,
+                this::getCurvedDriverLeftX)
+            .withControllerRotationAxis(() -> m_driverController.getRightX() * -1)
+            .deadband(Constants.DRIVER_CONTROLLER_DEADBAND)
+            .scaleTranslation(SwerveDriveConstants.NORMAL_SPEED_MULTIPLIER)
+            .allianceRelativeControl(true);
+    driveFastAngularVelocity =
+        driveAngularVelocity.copy().scaleTranslation(SwerveDriveConstants.FAST_SPEED_MULTIPLIER);
+    driveSlowAngularVelocity =
+        driveAngularVelocity
+            .copy()
+            .scaleTranslation(SwerveDriveConstants.SLOW_MODE_TRANSLATION_SCALE)
+            .scaleRotation(SwerveDriveConstants.SLOW_MODE_ROTATION_SCALE);
+    drivePassingSlowAngularVelocity =
+        driveAngularVelocity
+            .copy()
+            .scaleTranslation(SwerveDriveConstants.PASSING_SLOW_MODE_TRANSLATION_SCALE)
+            .scaleRotation(SwerveDriveConstants.PASSING_SLOW_MODE_ROTATION_SCALE);
+    driveDirectAngle =
+        driveAngularVelocity
+            .copy()
+            .withControllerHeadingAxis(m_driverController::getRightX, m_driverController::getRightY)
+            .headingWhile(true);
+    driveFieldOrientedAngularVelocity =
+        m_swerveDriveSubsystem.driveFieldOriented(
+            () ->
+                m_swerveDriveSubsystem.getSpeedMode()
+                    ? driveFastAngularVelocity.get()
+                    : driveAngularVelocity.get());
+
+    driveSlowFieldOrientedAngularVelocity =
+        new ConditionalCommand(
+            m_swerveDriveSubsystem.driveFieldOriented(drivePassingSlowAngularVelocity),
+            m_swerveDriveSubsystem.driveFieldOriented(driveSlowAngularVelocity),
+            () -> LaunchCalculator.getInstance().getParameters().passing());
+
+    driveFieldOrientedDirectAngle = m_swerveDriveSubsystem.driveFieldOriented(driveDirectAngle);
+
+    posesPublisher =
+        NetworkTableInstance.getDefault()
+            .getStructArrayTopic("/3D/ComponentPoses", Pose3d.struct)
+            .publish();
+
+    m_linearIntakeSubsystem = LinearIntakeSubsystem.getInstance();
+    m_hoodSubsystem = HoodSubsystem.getInstance();
+    m_turretSubsystem = TurretSubsystem.getInstance();
+    m_flywheelSubsystem = FlywheelSubsystem.getInstance();
+
+    m_indexerSystem =
+        new IndexerSystem(
+            IndexerBeltSubsystem.getInstance(),
+            FeederSubsystem.getInstance(),
+            RollerFloorSubsystem.getInstance(),
+            VerticalRollerSubsystem.getInstance());
+    m_intakeSystem =
+        new IntakeSystem(LinearIntakeSubsystem.getInstance(), IntakeRollerSubsystem.getInstance());
+    m_shooterSystem =
+        new ShooterSystem(
+            FlywheelSubsystem.getInstance(),
+            HoodSubsystem.getInstance(),
+            TurretSubsystem.getInstance());
+
+    NamedCommands.registerCommand("extendAndIntake", m_intakeSystem.extendAndIntake());
+    NamedCommands.registerCommand("stopIntake", m_intakeSystem.stop());
+    NamedCommands.registerCommand("feedFuel", m_indexerSystem.feedFuel());
+    NamedCommands.registerCommand("storeFuel", m_indexerSystem.storeFuel());
+    NamedCommands.registerCommand("aimAndShoot", m_shooterSystem.aimAndShoot());
+
+    autoChooser = AutoBuilder.buildAutoChooser();
+    SmartDashboard.putData("Auto Chooser", autoChooser);
+    autoChooser.setDefaultOption("Do Nothing", Commands.none());
+
+    configureBindings();
+  }
+
+  public Command setFlywheelDefaultSpeed() {
+    return m_shooterSystem.flywheelDefaultSpeed();
+  }
+
+  private void configureBindings() {
+
+    m_swerveDriveSubsystem.setDefaultCommand(driveFieldOrientedAngularVelocity);
+
+    BooleanSupplier isL2PastThreshold =
+        () -> m_driverController.getL2Axis() > Constants.DRIVER_CONTROLLER_TRIGGER_THRESHOLD;
+    BooleanSupplier isR2PastThreshold =
+        () -> m_driverController.getR2Axis() > Constants.DRIVER_CONTROLLER_TRIGGER_THRESHOLD;
+
+    Trigger intakeTrigger = new Trigger(isL2PastThreshold);
+    Trigger shootTrigger = new Trigger(isR2PastThreshold);
+
+    m_driverController
+        .options()
+        .onTrue((Commands.runOnce(m_swerveDriveSubsystem::zeroGyroWithAlliance)));
+    m_driverController.create().whileTrue(m_swerveDriveSubsystem.centerModulesCommand());
+
+    intakeTrigger
+        .negate()
+        .and(shootTrigger.negate())
+        .onTrue(m_intakeSystem.stop())
+        .onTrue(m_shooterSystem.stop())
+        .onTrue(m_indexerSystem.stop());
+
+    intakeTrigger
+        .negate()
+        .and(shootTrigger)
+        .onTrue(m_shooterSystem.aimAndShoot())
+        .onTrue(
+            Commands.sequence(
+                new ConditionalCommand(
+                    Commands.waitUntil(m_shooterSystem::isShooterReady).withTimeout(2),
+                    Commands.waitUntil(m_shooterSystem::isTurretReady).withTimeout(1),
+                    () -> LaunchCalculator.getInstance().getParameters().passing()),
+                Commands.parallel(
+                    m_intakeSystem.shuffle(), m_indexerSystem.feedFuel()
+                    )))
+        .whileTrue(driveSlowFieldOrientedAngularVelocity);
+
+    intakeTrigger
+        .and(shootTrigger.negate())
+        .onTrue(m_intakeSystem.extendAndIntake())
+        .onTrue(m_shooterSystem.stop())
+        .onTrue(m_indexerSystem.storeFuel());
+
+    intakeTrigger
+        .and(shootTrigger)
+        .onTrue(m_intakeSystem.extendAndIntake())
+        .onTrue(m_shooterSystem.aimAndShoot())
+        .onTrue(
+            Commands.sequence(
+                new ConditionalCommand(
+                    Commands.waitUntil(m_shooterSystem::isShooterReady).withTimeout(2),
+                    Commands.waitUntil(m_shooterSystem::isTurretReady).withTimeout(1),
+                    () -> LaunchCalculator.getInstance().getParameters().passing()),
+                m_indexerSystem.feedFuel()))
+        .whileTrue(driveSlowFieldOrientedAngularVelocity);
+
+    Trigger manualShootTrigger = m_driverController.R1();
+
+    intakeTrigger
+        .negate()
+        .and(manualShootTrigger.negate())
+        .and(shootTrigger.negate())
+        .onTrue(m_intakeSystem.stop())
+        .onTrue(m_shooterSystem.stop())
+        .onTrue(m_indexerSystem.stop());
+
+    intakeTrigger
+        .negate()
+        .and(manualShootTrigger)
+        .and(shootTrigger.negate())
+        .onTrue(m_shooterSystem.manualAimAndShoot())
+        .onTrue(
+            m_intakeSystem.shuffle().alongWith(m_indexerSystem.feedFuel())
+            )
+        .whileTrue(driveSlowFieldOrientedAngularVelocity);
+
+    intakeTrigger
+        .and(manualShootTrigger.negate())
+        .and(shootTrigger.negate())
+        .onTrue(m_intakeSystem.extendAndIntake())
+        .onTrue(m_shooterSystem.stop())
+        .onTrue(m_indexerSystem.storeFuel());
+
+    intakeTrigger
+        .and(manualShootTrigger)
+        .and(shootTrigger.negate())
+        .onTrue(m_intakeSystem.extendAndIntake())
+        .onTrue(m_shooterSystem.manualAimAndShoot())
+        .onTrue(m_indexerSystem.feedFuel())
+        .whileTrue(driveSlowFieldOrientedAngularVelocity);
+
+    Trigger outtakeTrigger = m_driverController.L1();
+
+    outtakeTrigger
+        .onTrue(m_intakeSystem.extendAndOuttake())
+        .onTrue(m_indexerSystem.reverseRollerFloor());
+
+    outtakeTrigger.onFalse(m_intakeSystem.stop()).onFalse(m_indexerSystem.stop());
+
+    m_driverController.povLeft().onTrue(m_turretSubsystem.moveTurretOffsetLeft());
+    m_driverController.povRight().onTrue(m_turretSubsystem.moveTurretOffsetRight());
+    m_driverController.povUp().onTrue(m_flywheelSubsystem.increaseFlywheelOffsetSpeed());
+    m_driverController.povDown().onTrue(m_flywheelSubsystem.decreaseFlywheelOffsetSpeed());
+
+    m_driverController.square().onTrue(m_swerveDriveSubsystem.setSpeedCommand(true));
+    m_driverController.cross().onTrue(m_swerveDriveSubsystem.setSpeedCommand(false));
+
+    m_driverController
+        .triangle()
+        .onTrue(m_turretSubsystem.resetTurretOffset())
+        .onTrue(m_flywheelSubsystem.resetFlywheelOffset());
+  }
+
+  public Command getAutonomousCommand() {
+    return autoChooser.getSelected();
+  }
+
+  public void publishComponentPoses() {
+    Pose3d turretPose = m_turretSubsystem.getPose3d();
+    Pose3d hoodPose = m_hoodSubsystem.getPose3d(turretPose);
+    Pose3d linearIntakePose = m_linearIntakeSubsystem.getPose3d();
+
+    posesPublisher.set(new Pose3d[] {linearIntakePose, turretPose, hoodPose, new Pose3d()});
+  }
+
+  public void calibrateLinearIntakePosition() {
+    boolean leftExtended = m_linearIntakeSubsystem.getLeftExtendedLimitSwitch();
+    boolean rightExtended = m_linearIntakeSubsystem.getRightExtendedLimitSwitch();
+    boolean leftRetracted = m_linearIntakeSubsystem.getLeftRetractedLimitSwitch();
+    boolean rightRetracted = m_linearIntakeSubsystem.getRightRetractedLimitSwitch();
+
+    if (leftExtended || rightExtended) {
+      m_linearIntakeSubsystem.setEncoderPositionExtended();
+    } else if (leftRetracted || rightRetracted) {
+      m_linearIntakeSubsystem.setEncoderPositionRetracted();
+    }
+  }
+
+  public Command stopAllSubsystems() {
+    return Commands.parallel(
+        Commands.sequence(
+            m_intakeSystem.extend().withTimeout(1),
+            m_intakeSystem.stop()),
+        m_shooterSystem.stop(),
+        m_indexerSystem.stop());
+  }
+}
